@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-forge"
+version = "0.1.0"
+description = "Computer-use automation take-home project"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.8,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2,<9",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
