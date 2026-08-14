@@ -45,3 +45,24 @@ Synthetic demo states:
 - `77777` — permission-denied hard-failure surface
 
 All names, IDs, account numbers, and balances are synthetic.
+
+## Browser surface
+
+Stage 3 adds a surface-independent `ComputerSurface` contract and a Playwright-backed
+`BrowserSurface`. Higher-level agent and replay code will depend on this seam rather
+than directly on Playwright.
+
+Install the Chromium browser binary after installing Python dependencies:
+
+```bash
+playwright install chromium
+```
+
+With the mock bank running in one terminal, manually exercise the browser adapter:
+
+```bash
+python -m src.surface.demo --member-id 12345 --headed
+```
+
+Stage 3 intentionally exposes only low-level browser primitives. Structured UI
+observations and robust target representations are added in Stage 4.
