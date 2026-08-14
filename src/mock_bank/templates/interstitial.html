@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Session Confirmation</title>
+    <link rel="stylesheet" href="/static/legacy.css">
+</head>
+<body>
+<div class="shell">
+    <div class="topbar">Legacy Member Servicing System</div>
+    <div class="content">
+        <div class="section-title">Session Confirmation</div>
+        <div class="message">
+            Your session requires confirmation before the member record can be displayed.
+        </div>
+        <form method="post" action="/session/continue">
+            <input type="hidden" name="member_id" value="{{ member_id }}">
+            <button type="submit">Continue Session</button>
+        </form>
+
+    </div>
+</div>
+</body>
+</html>

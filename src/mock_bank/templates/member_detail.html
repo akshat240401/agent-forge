@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Member Details</title>
+    <link rel="stylesheet" href="/static/legacy.css">
+</head>
+<body>
+<div class="shell">
+    <div class="topbar">Legacy Member Servicing System</div>
+    <div class="content">
+        <div class="section-title">Member Record</div>
+        <table>
+            <tr><th>Member ID</th><td>{{ member.member_id }}</td></tr>
+            <tr><th>Name</th><td>{{ member.name }}</td></tr>
+            <tr><th>Status</th><td>{{ member.status }}</td></tr>
+        </table>
+
+        <div class="section-title">Accounts</div>
+        <table>
+            <tr>
+                <th>Type</th>
+                <th>Account Number</th>
+                <th>Balance</th>
+            </tr>
+            {% for account in member.accounts %}
+            <tr>
+                <td>{{ account.type }}</td>
+                <td>{{ account.account_number }}</td>
+                <td>{{ account.balance }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <p><a href="/">Return to Member Search</a></p>
+
+    </div>
+</div>
+</body>
+</html>

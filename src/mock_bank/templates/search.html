@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Member Search</title>
+    <link rel="stylesheet" href="/static/legacy.css">
+</head>
+<body>
+<div class="shell">
+    <div class="topbar">Legacy Member Servicing System</div>
+    <div class="content">
+        <div class="section-title">Member Search</div>
+        {% if message %}
+        <div class="message error">{{ message }}</div>
+        {% endif %}
+        <form method="post" action="/members/search">
+            <table class="form-table">
+                <tr>
+                    <td>Member ID</td>
+                    <td><input type="text" name="member_id" value="{{ member_id }}" autocomplete="off"></td>
+                    <td><button type="submit">Search</button></td>
+                </tr>
+            </table>
+        </form>
+
+    </div>
+</div>
+</body>
+</html>
