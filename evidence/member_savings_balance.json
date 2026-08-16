@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "capability": {
+    "id": "member_savings_balance",
+    "name": "Read Member Savings Balance",
+    "description": "Look up a member in the legacy servicing UI and return their current savings balance.",
+    "version": "1.0.0"
+  },
+  "target": {
+    "application_family": "legacy_member_servicing",
+    "surface_type": "web",
+    "entry_point": "http://127.0.0.1:8000/",
+    "compatible_versions": null
+  },
+  "inputs": {
+    "member_id": {
+      "type": "string",
+      "required": true,
+      "description": "Member identifier to look up."
+    }
+  },
+  "outputs": {
+    "savings_balance": {
+      "type": "string",
+      "required": true,
+      "description": "Current balance of the member's savings account.",
+      "extractor": {
+        "strategy": "table_cell",
+        "row_text": "Savings",
+        "column_header": "Balance"
+      }
+    }
+  },
+  "steps": [
+    {
+      "id": "step_1_type",
+      "action": "type",
+      "target": {
+        "description": "textbox / Member ID",
+        "candidates": [
+          {
+            "strategy": "xpath",
+            "value": "//td[normalize-space(.)='Member ID']/following-sibling::td[1]//input"
+          },
+          {
+            "strategy": "structural",
+            "value": "input[name=\"member_id\"]"
+          }
+        ]
+      },
+      "value": {
+        "kind": "parameter",
+        "name": "member_id"
+      },
+      "checkpoint": {
+        "page_title": "Member Search",
+        "required_text": []
+      },
+      "risk": "safe"
+    },
+    {
+      "id": "step_2_click",
+      "action": "click",
+      "target": {
+        "description": "button / Search",
+        "candidates": [
+          {
+            "strategy": "role_name",
+            "value": "button|Search"
+          },
+          {
+            "strategy": "visible_text",
+            "value": "Search"
+          }
+        ]
+      },
+      "value": null,
+      "checkpoint": {
+        "page_title": "Member Details",
+        "required_text": [
+          "Member Record"
+        ]
+      },
+      "risk": "safe"
+    }
+  ],
+  "success_checkpoint": {
+    "page_title": "Member Details",
+    "required_text": [
+      "Member Record",
+      "Accounts",
+      "Savings"
+    ]
+  },
+  "business_outcomes": [
+    {
+      "code": "member_not_found",
+      "description": "No matching member exists for the supplied member ID.",
+      "checkpoint": {
+        "page_title": "Member Not Found",
+        "required_text": [
+          "No member found"
+        ]
+      }
+    }
+  ]
+}
