@@ -1,0 +1,111 @@
+{
+  "message": null,
+  "outputs": {
+    "savings_balance": "$4,821.37"
+  },
+  "run_id": "run_d37f9847c87c",
+  "status": "success",
+  "steps": [
+    {
+      "decision": {
+        "action": "type",
+        "control_index": 0,
+        "reason": "Enter the provided member ID into the Member ID field to prepare for search.",
+        "result": null,
+        "value": "12345"
+      },
+      "observed_text": [
+        "Legacy Member Servicing System",
+        "Member Search",
+        "Member ID",
+        "Search"
+      ],
+      "page_title": "Member Search",
+      "page_url": "http://127.0.0.1:8000/",
+      "step_number": 1,
+      "target": {
+        "candidates": [
+          {
+            "strategy": "xpath",
+            "value": "//td[normalize-space(.)='Member ID']/following-sibling::td[1]//input"
+          },
+          {
+            "strategy": "structural",
+            "value": "input[name=\"member_id\"]"
+          }
+        ],
+        "description": "textbox / Member ID"
+      }
+    },
+    {
+      "decision": {
+        "action": "click",
+        "control_index": 1,
+        "reason": "Initiate the search for the entered member ID 12345 to view the member details and savings balance.",
+        "result": null,
+        "value": null
+      },
+      "observed_text": [
+        "Legacy Member Servicing System",
+        "Member Search",
+        "Member ID",
+        "Search"
+      ],
+      "page_title": "Member Search",
+      "page_url": "http://127.0.0.1:8000/",
+      "step_number": 2,
+      "target": {
+        "candidates": [
+          {
+            "strategy": "role_name",
+            "value": "button|Search"
+          },
+          {
+            "strategy": "visible_text",
+            "value": "Search"
+          }
+        ],
+        "description": "button / Search"
+      }
+    },
+    {
+      "decision": {
+        "action": "finish",
+        "control_index": null,
+        "reason": "The Member Details page for ID 12345 is displayed and shows the current savings balance, satisfying the goal.",
+        "result": [
+          {
+            "name": "savings_balance",
+            "value": "$4,821.37"
+          }
+        ],
+        "value": null
+      },
+      "observed_text": [
+        "Legacy Member Servicing System",
+        "Member Record",
+        "Member ID",
+        "12345",
+        "Name",
+        "Alex Morgan",
+        "Status",
+        "Active",
+        "Accounts",
+        "Type",
+        "Account Number",
+        "Balance",
+        "Savings",
+        "S-1044",
+        "$4,821.37",
+        "Checking",
+        "C-8821",
+        "$1,205.12",
+        "Return to Member Search"
+      ],
+      "page_title": "Member Details",
+      "page_url": "http://127.0.0.1:8000/members/search",
+      "step_number": 3,
+      "target": null
+    }
+  ]
+}

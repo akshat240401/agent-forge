@@ -1,0 +1,39 @@
+{
+  "capability_id": "member_savings_balance",
+  "capability_version": "1.0.0",
+  "code": "checkpoint_failed",
+  "evidence_path": "evidence\\run_26d42264e4d2\\failure_step_2_click_checkpoint.png",
+  "expected_state": {
+    "page_title": "Member Details",
+    "required_text": [
+      "Member Record"
+    ]
+  },
+  "failed_step_id": "step_2_click",
+  "message": "Checkpoint failed after step_2_click.",
+  "observed_state": {
+    "missing_required_text": [
+      "Member Record"
+    ],
+    "page_title": "Permission Denied"
+  },
+  "outputs": {},
+  "run_id": "run_26d42264e4d2",
+  "status": "failure",
+  "steps": [
+    {
+      "action": "type",
+      "checkpoint_passed": true,
+      "resolved_strategy": "xpath",
+      "resolved_value": "//td[normalize-space(.)='Member ID']/following-sibling::td[1]//input",
+      "step_id": "step_1_type"
+    },
+    {
+      "action": "click",
+      "checkpoint_passed": false,
+      "resolved_strategy": "role_name",
+      "resolved_value": "button|Search",
+      "step_id": "step_2_click"
+    }
+  ]
+}

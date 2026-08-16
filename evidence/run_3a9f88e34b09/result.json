@@ -1,0 +1,31 @@
+{
+  "capability_id": "member_savings_balance",
+  "capability_version": "1.0.0",
+  "code": null,
+  "evidence_path": null,
+  "expected_state": null,
+  "failed_step_id": null,
+  "message": null,
+  "observed_state": null,
+  "outputs": {
+    "savings_balance": "$4,821.37"
+  },
+  "run_id": "run_3a9f88e34b09",
+  "status": "success",
+  "steps": [
+    {
+      "action": "type",
+      "checkpoint_passed": true,
+      "resolved_strategy": "xpath",
+      "resolved_value": "//td[normalize-space(.)='Member ID']/following-sibling::td[1]//input",
+      "step_id": "step_1_type"
+    },
+    {
+      "action": "click",
+      "checkpoint_passed": true,
+      "resolved_strategy": "role_name",
+      "resolved_value": "button|Search",
+      "step_id": "step_2_click"
+    }
+  ]
+}

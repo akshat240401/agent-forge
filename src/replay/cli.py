@@ -20,6 +20,7 @@ async def run(args: argparse.Namespace) -> int:
         evidence_root=args.evidence_root,
         headless=not args.headed,
         enable_handoff=args.handoff,
+        checkpoint_timeout_ms=0 if args.handoff else 2500,
     )
 
     result = await engine.run(
@@ -61,3 +62,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
