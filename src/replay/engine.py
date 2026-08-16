@@ -7,9 +7,13 @@ from src.handoff.manager import TerminalHandoffManager
 from src.models import ActionType, PolicyConfig, RunMode
 from src.observability import EvidenceManager, RunRecorder
 from src.policy import PolicyEngine
-from src.replay.checkpoints import evaluate_checkpoint
+from src.replay.checkpoints import expected_state, wait_for_checkpoint
 from src.replay.extractors import extract_table_cell
 from src.replay.models import ReplayResult, ReplayStepRecord
+from src.replay.validation import (
+    validate_capability_for_replay,
+    validate_runtime_inputs,
+)
 from src.surface import BrowserSurface, first_matching_locator
 
 
@@ -23,13 +27,17 @@ class ReplayEngine:
         headless: bool = False,
         enable_handoff: bool = False,
         handoff_input_func=input,
+        checkpoint_timeout_ms: int = 2500,
     ) -> None:
+        validate_capability_for_replay(artifact)
+
         self.artifact = artifact
         self.policy = policy
         self.evidence_root = evidence_root
         self.headless = headless
         self.enable_handoff = enable_handoff
         self.handoff_input_func = handoff_input_func
+        self.checkpoint_timeout_ms = checkpoint_timeout_ms
 
     async def run(self, inputs: dict[str, str]) -> ReplayResult:
         recorder = RunRecorder(
@@ -37,6 +45,7 @@ class ReplayEngine:
             mode=RunMode.REPLAY,
         )
         evidence = EvidenceManager(recorder.run_dir)
+
         handoff = (
             TerminalHandoffManager(
                 recorder=recorder,
@@ -46,10 +55,14 @@ class ReplayEngine:
             if self.enable_handoff
             else None
         )
+
         records: list[ReplayStepRecord] = []
 
-        error = self._validate_inputs(inputs)
-        if error:
+        input_error = validate_runtime_inputs(
+            self.artifact,
+            inputs,
+        )
+        if input_error:
             return self._finish(
                 recorder,
                 ReplayResult(
@@ -57,7 +70,7 @@ class ReplayEngine:
                     run_id=recorder.run_id,
                     capability_id=self.artifact.capability.id,
                     capability_version=self.artifact.capability.version,
-                    message=error,
+                    message=input_error,
                 ),
             )
 
@@ -66,6 +79,7 @@ class ReplayEngine:
             action=ActionType.NAVIGATE,
             target_url=entry,
         )
+
         if not navigation.allowed:
             return self._finish(
                 recorder,
@@ -81,6 +95,7 @@ class ReplayEngine:
 
         async with BrowserSurface(headless=self.headless) as surface:
             await surface.navigate(entry)
+
             recorder.record(
                 "replay_started",
                 details={
@@ -96,6 +111,7 @@ class ReplayEngine:
                     target_url=surface.page.url,
                     risk=step.risk,
                 )
+
                 if not policy.allowed:
                     screenshot = await evidence.capture_failure_screenshot(
                         surface,
@@ -112,6 +128,7 @@ class ReplayEngine:
                             code=policy.code,
                             message=policy.reason,
                             evidence_path=str(screenshot),
+                            failed_step_id=step.id,
                         ),
                     )
 
@@ -125,7 +142,9 @@ class ReplayEngine:
                         ActionType.READ,
                     }:
                         if step.target is None:
-                            raise LookupError(f"Step {step.id} has no target.")
+                            raise LookupError(
+                                f"Step {step.id} has no target."
+                            )
 
                         locator, candidate = await first_matching_locator(
                             surface.page,
@@ -136,34 +155,52 @@ class ReplayEngine:
 
                         if step.action == ActionType.CLICK:
                             await locator.click()
+
                         elif step.action == ActionType.TYPE:
                             await locator.fill(
-                                self._resolve_value(step.value, inputs)
+                                self._resolve_value(
+                                    step.value,
+                                    inputs,
+                                )
                             )
+
                         else:
                             await locator.inner_text()
 
                     elif step.action == ActionType.WAIT:
-                        await surface.wait(
-                            int(self._resolve_value(step.value, inputs))
+                        wait_ms = int(
+                            self._resolve_value(
+                                step.value,
+                                inputs,
+                            )
                         )
+                        # Bound waits even if an artifact contains a bad literal.
+                        wait_ms = max(0, min(wait_ms, 5000))
+                        await surface.wait(wait_ms)
+
                     elif step.action == ActionType.NAVIGATE:
                         await surface.navigate(entry)
+
                     else:
                         raise ValueError(
-                            f"Unsupported replay action: {step.action.value}"
+                            "Unsupported replay action: "
+                            f"{step.action.value}"
                         )
 
                     checkpoint_passed = None
+
                     if step.checkpoint is not None:
-                        evaluation = await evaluate_checkpoint(
+                        evaluation = await wait_for_checkpoint(
                             surface,
                             step.checkpoint,
+                            timeout_ms=self.checkpoint_timeout_ms,
                         )
                         checkpoint_passed = evaluation.passed
 
                         if not evaluation.passed:
-                            business = await self._match_business_outcome(surface)
+                            business = await self._match_business_outcome(
+                                surface
+                            )
                             if business is not None:
                                 return self._finish(
                                     recorder,
@@ -183,10 +220,17 @@ class ReplayEngine:
                                         ],
                                         code=business.code,
                                         message=business.description,
+                                        failed_step_id=step.id,
+                                        expected_state=expected_state(
+                                            step.checkpoint
+                                        ),
+                                        observed_state=evaluation.observed_state(),
                                     ),
                                 )
 
-                            recoverable = await self._detect_recoverable(surface)
+                            recoverable = await self._detect_recoverable(
+                                surface
+                            )
                             if recoverable is not None:
                                 if handoff is None:
                                     return self._finish(
@@ -210,6 +254,13 @@ class ReplayEngine:
                                                 "Known recoverable runtime "
                                                 "condition detected."
                                             ),
+                                            failed_step_id=step.id,
+                                            expected_state=expected_state(
+                                                step.checkpoint
+                                            ),
+                                            observed_state=(
+                                                evaluation.observed_state()
+                                            ),
                                         ),
                                     )
 
@@ -221,15 +272,18 @@ class ReplayEngine:
                                     ),
                                     current_step=step.id,
                                     reason=(
-                                        "Known interstitial blocked deterministic "
-                                        "replay and requires manual continuation."
+                                        "Known interstitial blocked "
+                                        "deterministic replay and requires "
+                                        "manual continuation."
                                     ),
                                 )
 
-                                resumed = await evaluate_checkpoint(
+                                resumed = await wait_for_checkpoint(
                                     surface,
                                     step.checkpoint,
+                                    timeout_ms=self.checkpoint_timeout_ms,
                                 )
+
                                 if not resumed.passed:
                                     screenshot = (
                                         await evidence.capture_failure_screenshot(
@@ -253,10 +307,18 @@ class ReplayEngine:
                                             steps=records,
                                             code="resume_validation_failed",
                                             message=(
-                                                "Human returned control, but the "
-                                                "expected checkpoint was not reached."
+                                                "Human returned control, but "
+                                                "the expected checkpoint was "
+                                                "not reached."
                                             ),
                                             evidence_path=str(screenshot),
+                                            failed_step_id=step.id,
+                                            expected_state=expected_state(
+                                                step.checkpoint
+                                            ),
+                                            observed_state=(
+                                                resumed.observed_state()
+                                            ),
                                         ),
                                     )
 
@@ -270,6 +332,7 @@ class ReplayEngine:
                                         "page_title": resumed.observed_title,
                                     },
                                 )
+
                             else:
                                 screenshot = (
                                     await evidence.capture_failure_screenshot(
@@ -297,16 +360,17 @@ class ReplayEngine:
                                         ],
                                         code="checkpoint_failed",
                                         message=(
-                                            f"Checkpoint failed after {step.id}. "
-                                            f"Expected title="
-                                            f"{step.checkpoint.page_title!r} and "
-                                            f"text={step.checkpoint.required_text!r}; "
-                                            f"observed title="
-                                            f"{evaluation.observed_title!r}, "
-                                            f"missing="
-                                            f"{list(evaluation.missing_text)!r}."
+                                            f"Checkpoint failed after "
+                                            f"{step.id}."
                                         ),
                                         evidence_path=str(screenshot),
+                                        failed_step_id=step.id,
+                                        expected_state=expected_state(
+                                            step.checkpoint
+                                        ),
+                                        observed_state=(
+                                            evaluation.observed_state()
+                                        ),
                                     ),
                                 )
 
@@ -318,6 +382,7 @@ class ReplayEngine:
                         checkpoint_passed,
                     )
                     records.append(record)
+
                     recorder.record(
                         "replay_step_completed",
                         step_id=step.id,
@@ -345,13 +410,16 @@ class ReplayEngine:
                             code=type(exc).__name__,
                             message=str(exc),
                             evidence_path=str(screenshot),
+                            failed_step_id=step.id,
                         ),
                     )
 
-            final = await evaluate_checkpoint(
+            final = await wait_for_checkpoint(
                 surface,
                 self.artifact.success_checkpoint,
+                timeout_ms=self.checkpoint_timeout_ms,
             )
+
             if not final.passed:
                 screenshot = await evidence.capture_failure_screenshot(
                     surface,
@@ -366,18 +434,22 @@ class ReplayEngine:
                         capability_version=self.artifact.capability.version,
                         steps=records,
                         code="success_checkpoint_failed",
-                        message=(
-                            "Final success checkpoint failed. "
-                            f"Observed title={final.observed_title!r}, "
-                            f"missing={list(final.missing_text)!r}."
-                        ),
+                        message="Final success checkpoint failed.",
                         evidence_path=str(screenshot),
+                        failed_step_id="success_checkpoint",
+                        expected_state=expected_state(
+                            self.artifact.success_checkpoint
+                        ),
+                        observed_state=final.observed_state(),
                     ),
                 )
 
             try:
                 outputs = {
-                    name: await extract_table_cell(surface, spec.extractor)
+                    name: await extract_table_cell(
+                        surface,
+                        spec.extractor,
+                    )
                     for name, spec in self.artifact.outputs.items()
                 }
             except Exception as exc:
@@ -396,6 +468,7 @@ class ReplayEngine:
                         code=type(exc).__name__,
                         message=str(exc),
                         evidence_path=str(screenshot),
+                        failed_step_id="output_extraction",
                     ),
                 )
 
@@ -407,56 +480,59 @@ class ReplayEngine:
                 steps=records,
                 outputs=outputs,
             )
+
             recorder.record(
                 "replay_completed",
                 result=result.model_dump(mode="json"),
             )
             return self._finish(recorder, result)
 
-    def _validate_inputs(self, inputs: dict[str, str]) -> str | None:
-        for name, spec in self.artifact.inputs.items():
-            if spec.required and name not in inputs:
-                return f"Missing required input: {name}"
-
-        unknown = sorted(set(inputs) - set(self.artifact.inputs))
-        if unknown:
-            return f"Unknown input(s): {', '.join(unknown)}"
-
-        return None
-
     @staticmethod
-    def _resolve_value(value, inputs: dict[str, str]) -> str:
+    def _resolve_value(
+        value,
+        inputs: dict[str, str],
+    ) -> str:
         if value is None:
             return ""
+
         if isinstance(value, ParameterValue):
             if value.name not in inputs:
-                raise KeyError(f"Missing bound parameter: {value.name}")
+                raise KeyError(
+                    f"Missing bound parameter: {value.name}"
+                )
             return str(inputs[value.name])
+
         if isinstance(value, LiteralValue):
             return value.value
+
         raise TypeError(
             f"Unsupported step value: {type(value).__name__}"
         )
 
     async def _match_business_outcome(self, surface):
         for outcome in self.artifact.business_outcomes:
-            evaluation = await evaluate_checkpoint(
+            evaluation = await wait_for_checkpoint(
                 surface,
                 outcome.checkpoint,
+                timeout_ms=0,
             )
             if evaluation.passed:
                 return outcome
         return None
 
     @staticmethod
-    async def _detect_recoverable(surface) -> str | None:
+    async def _detect_recoverable(
+        surface,
+    ) -> str | None:
         title = await surface.page.title()
         body = await surface.page.locator("body").inner_text()
+
         if (
             title == "Session Confirmation"
             and "Continue Session" in body
         ):
             return "known_interstitial"
+
         return None
 
     @staticmethod
@@ -480,14 +556,20 @@ class ReplayEngine:
         recorder: RunRecorder,
         result: ReplayResult,
     ) -> ReplayResult:
-        recorder.write_result(result.model_dump(mode="json"))
+        recorder.write_result(
+            result.model_dump(mode="json")
+        )
         return result
 
 
-def load_artifact(path: str | Path) -> CapabilityArtifactV1:
-    return CapabilityArtifactV1.model_validate_json(
+def load_artifact(
+    path: str | Path,
+) -> CapabilityArtifactV1:
+    artifact = CapabilityArtifactV1.model_validate_json(
         Path(path).read_text(encoding="utf-8")
     )
+    validate_capability_for_replay(artifact)
+    return artifact
 
 
 def default_replay_policy(
@@ -495,7 +577,9 @@ def default_replay_policy(
 ) -> PolicyEngine:
     from urllib.parse import urlparse
 
-    parsed = urlparse(artifact.target.entry_point)
+    parsed = urlparse(
+        artifact.target.entry_point
+    )
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
     return PolicyEngine(
