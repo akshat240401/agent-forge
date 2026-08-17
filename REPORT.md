@@ -2,6 +2,25 @@
 
 AgentForge separates **discovery** from **production execution**. Discovery is intentionally flexible: a natural-language goal and entry point are given to an LLM-driven loop that repeatedly observes the current UI, chooses one structured action, executes it through a policy-checked surface adapter, and observes again. The loop is bounded by maximum steps and a wall-clock timeout so a model cannot wander indefinitely. A successful discovery run is evidence, not the production automation itself.
 
+```mermaid
+flowchart LR
+    A[Goal + Target] --> B[LLM Discovery]
+    B --> C[Discovery Evidence]
+    C --> D[Capability Compiler]
+    D --> E[Versioned Capability Artifact]
+    E --> F[Deterministic Replay]
+    E --> G[Capability API]
+    G --> F
+    F --> H[ComputerSurface]
+    H --> I[BrowserSurface / Playwright]
+    I --> J[Legacy UI]
+
+    K[Policy / Guardrails] -.-> B
+    K -.-> F
+    L[Evidence / Redaction] -.-> B
+    L -.-> F
+```
+
 The production path begins only after compilation. `CapabilityCompiler` converts a successful discovery result into a typed, reviewable capability artifact. Runtime values such as the discovery member ID are replaced with named parameters, UI targets are preserved as ordered candidates, output extraction is encoded explicitly, and checkpoints define the expected state. `ReplayEngine` then executes this artifact deterministically with no LLM decision calls.
 
 The concrete implementation is a local legacy-style web application driven through Playwright, but discovery and replay are not organized around Playwright APIs directly. `ComputerSurface` is the seam between logical automation actions and a particular perception/action technology; `BrowserSurface` is the current adapter. Structured observation and target construction live above that adapter. This lets the artifact describe *what control is intended and what state is expected* rather than embedding raw browser code as the capability.
