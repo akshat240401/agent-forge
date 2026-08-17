@@ -177,7 +177,8 @@ asyncio.run(main())
     Check ($LASTEXITCODE -eq 0) "Allowlist, risk and redaction tests pass"
     $trackedEnv = (git ls-files -- ".env" | Out-String).Trim()
     Check ([string]::IsNullOrWhiteSpace($trackedEnv)) "Real .env is not tracked"
-    $secretMatches = (git grep -n "sk-" -- . 2>$null | Out-String).Trim()
+    $secretPattern = "s" + "k-"
+    $secretMatches = (git grep -n $secretPattern -- . 2>$null | Out-String).Trim()
     Check ([string]::IsNullOrWhiteSpace($secretMatches)) "No obvious API secret pattern in tracked files"
 
     Section "3.5 EVIDENCE / OBSERVABILITY"
